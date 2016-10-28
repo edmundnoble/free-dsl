@@ -61,14 +61,12 @@ object Confessions {
       Free.suspend[Coyoneda[ISet, ?], A](Coyoneda(instr, Free.returnValue))
 
     def map[ISet[_], A, B](program: Program[ISet, A])(f: A => B): Program[ISet, B] =
-      flatMap[ISet, A, B](program)(a => Free.returnValue[Coyoneda[ISet, ?], B](f(a)))
+      flatMap[ISet, A, B](program)(a => Free.returnValue(f(a)))
 
     def flatMap[ISet[_], A, B](program: Program[ISet, A])(f: A => Program[ISet, B]): Program[ISet, B] = program match {
       case Return(a) => f(a)
       case Suspend(ffree) =>
-        Free.suspend[Coyoneda[ISet, ?], B](
-          ffree.map(flatMap[ISet, A, B](_)(a => f(a)))
-        )
+        Free.suspend[Coyoneda[ISet, ?], B](ffree.map(flatMap(_)(f)))
     }
 
   }
