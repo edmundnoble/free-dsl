@@ -1,4 +1,5 @@
 package freedsl
+
 object WhatIsAProgram {
 
     // removing flatMap from the specification of programs in favor of flatten, 
@@ -42,16 +43,17 @@ object WhatIsAProgram {
         import Program._
 
         final case class EitherInstruction[L[_], R[_], A](run: Either[L[A], R[A]])
-        object EitherInstruction {
-            def left[L[_], R[_], A](la: L[A]): EitherInstruction[L, R, A] = EitherInstruction(Left(la))
-            def right[L[_], R[_], A](ra: R[A]): EitherInstruction[L, R, A] = EitherInstruction(Right(ra))
+
+        implicit class eitherInstructionOps[ISet[_], A](val instruction: ISet[A]){
+            def left[R[_]]: EitherInstruction[ISet, R, A] = EitherInstruction(Left[ISet[A], R[A]](instruction))
+            def right[L[_]]: EitherInstruction[L, ISet, A] = EitherInstruction(Right[L[A], ISet[A]](instruction))
         }
 
         type LoggingAndStorageOps[A] = EitherInstruction[LoggingOps, StorageOps, A]
 
         def logValueAtKey(key: String): Program[LoggingAndStorageOps, Unit] = for {
-            storedValue <- inject[LoggingAndStorageOps, Option[String]](EitherInstruction.right[LoggingOps, StorageOps, Option[String]](Storage.Get(key)))
-            _ <- inject[LoggingAndStorageOps, Unit](EitherInstruction.left[LoggingOps, StorageOps, Unit](Logging.Info(() => s"value at $key: ${storedValue.toString}")))
+            storedValue <- inject[LoggingAndStorageOps, Option[String]](Storage.Get(key).right)
+            _ <- inject[LoggingAndStorageOps, Unit](Logging.Info(() => s"value at $key: ${storedValue.toString}").left)
         } yield ()
         
     }
