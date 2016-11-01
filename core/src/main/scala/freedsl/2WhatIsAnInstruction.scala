@@ -31,8 +31,6 @@ object WhatIsAnInstruction {
             final case class Sell(market: StockMarket, symbol: CompanySymbol, price: BigDecimal) extends StockOps[Option[BigDecimal]]
         }
 
-        object IO {
-            final case class IO[A](execute: () => A) extends InstructionSet[A]
-        }
+        final case class IO[A](execute: () => A) extends InstructionSet[A]
     }
 }
