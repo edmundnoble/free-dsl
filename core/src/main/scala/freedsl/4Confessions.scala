@@ -1,72 +1,54 @@
 package freedsl
 
 object Confessions {
-  // the map function corresponds to the fmap operator on Haskell Functors
-  // the returnValue and flatten functions correspond to the return and join operators on Haskell Monads
-
+  // the returnValue and flatMap functions correspond to the return and bind operators on Haskell Monads
   // so to find out exactly what we're doing when we make a program, we'll look at
   // ways these operations can be grafted on to the instruction set ISet[_] to make it a program type
 
-  // thanks to the contravariant Yoneda lemma, we know a way to make ANY F[_] into a Functor
-  trait Coyoneda[F[_], A] {
-    type I
-
-    val fi: F[I]
-
-    def fun(i: I): A
-
-    def map[B](f: A => B) = Coyoneda(fi, (i: I) => f(fun(i)))
-  }
-  // look familiar? this is precisely MapProgram from earlier, with F[_] set to
-  // Program[ISet, _] for some fixed ISet[_].
-
-  object Coyoneda {
-    def apply[F[_], A, I0](fi0: F[I0], funFunc: I0 => A) = new Coyoneda[F, A] {
-      override type I = I0
-      override val fi: F[I0] = fi0
-      override def fun(i: I): A = funFunc(i)
-    }
-    def returnValue[F[_], A](fa: F[A]) = new Coyoneda[F, A] {
-      override type I = A
-      override val fi: F[A] = fa
-      override def fun(i: A): A = i
-    }
-  }
-
-  // also, there is a technique for creating a Monad from a Functor and adding the minimal amount of structure required to do so.
+  // there is a technique for creating a Monad from a Functor and adding the minimal amount of structure required to do so.
   // it's called the Free monad, and one encoding of it goes as follows:
   sealed abstract class Free[F[_], A]
-  final case class Return[F[_], A](a: A) extends Free[F, A]
-  final case class Suspend[F[_], A](expand: F[Free[F, A]]) extends Free[F, A]
-
-  object Free {
-    def returnValue[F[_], A](a: A): Free[F, A] = Return(a)
-    def suspend[F[_], A](expand: F[Free[F, A]]): Free[F, A] = Suspend[F, A](expand)
+  final case class Pure[F[_], A](a: A) extends Free[F, A]
+  final case class Inject[F[_], A](fa: F[A]) extends Free[F, A]
+  abstract class FlatMap[F[_], A] extends Free[F, A] {
+    type I
+    val fa: Free[F, I]
+    def fun(in: I): Free[F, A]
   }
 
-  // thus, the Program[ISet, A] type we came up with earlier is equivalent to Free[Coyoneda[ISet, ?], A].
-  type Program[ISet[_], A] = Free[Coyoneda[ISet, ?], A]
+  object Free {
+    def pure[F[_], A](a: A): Free[F, A] = Pure(a)
+  }
+
+  // thus, the Program[ISet, A] type we came up with earlier is equivalent to Free[ISet, A],
+  type Program[ISet[_], A] = Free[ISet, A]
 
   object Program {
 
     // where ISet represents the instruction set (plus an extra function, to make it a Functor),
-    // Return is exactly ReturnValue and Suspend is a very similar operation to ProgramReturningProgram:
-    def programReturningProgram[F[_], A](f: Program[F, Program[F, A]]): Program[F, A] = f match {
-      case Return(a) => a
-      case Suspend(fa) =>
-        Suspend[Coyoneda[F, ?], A](fa.map(programReturningProgram))
+    // Return is exactly ReturnValue and FlatMap is flatMap
+    def programReturningProgram[F[_], A](f: Program[F, Program[F, A]]): Program[F, A] = new FlatMap[F, A] {
+      override type I = Program[F, A]
+      override val fa: Program[F, Program[F, A]] = f
+      override def fun(p: Program[F, A]): Program[F, A] = p
     }
 
     def inject[ISet[_], A](instr: ISet[A]): Program[ISet, A] =
-      Free.suspend[Coyoneda[ISet, ?], A](Coyoneda(instr, Free.returnValue))
+      Inject(instr)
 
-    def map[ISet[_], A, B](program: Program[ISet, A])(f: A => B): Program[ISet, B] =
-      flatMap[ISet, A, B](program)(a => Free.returnValue(f(a)))
+    def map[ISet[_], A, B](program: Program[ISet, A])(f: A => B): Program[ISet, B] = new FlatMap[ISet, B] {
+      override type I = A
+      override val fa: Program[ISet, A] = program
+      override def fun(a: A): Program[ISet, B] = Pure(f(a))
 
-    def flatMap[ISet[_], A, B](program: Program[ISet, A])(f: A => Program[ISet, B]): Program[ISet, B] = program match {
-      case Return(a) => f(a)
-      case Suspend(ffree) =>
-        Free.suspend[Coyoneda[ISet, ?], B](ffree.map(flatMap(_)(f)))
+    }
+
+    import cats.~>, cats.implicits._
+
+    def interpret[ISet[_], E[_] : cats.Monad, A](program: Program[ISet, A])(trans: ISet ~> E): E[A] = program match {
+      case Pure(a) => a.pure[E]
+      case Inject(fa) => trans(fa)
+      case fm: FlatMap[ISet, A] => interpret(fm.fa)(trans).flatMap(i => interpret(fm.fun(i))(trans))
     }
 
   }
