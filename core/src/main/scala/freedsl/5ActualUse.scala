@@ -7,11 +7,15 @@ import WhatIsAnInstruction.Examples._, Storage._, Logging._, IO._
 object ActualUse {
 
   object SmartConstructors {
-    def get[S](key: String)(implicit ev: Member.<=[StorageOps, S]): Eff[S, Option[String]] = Get(key).send[S]
-    def set[S](key: String, data: String)(implicit ev: Member.<=[StorageOps, S]): Eff[S, Unit] = Set(key, data).send[S]
-    def remove[S](key: String)(implicit ev: Member.<=[StorageOps, S]): Eff[S, Unit] = Remove(key).send[S]
-    def info[S](out: => String)(implicit ev: Member.<=[LoggingOps, S]): Eff[S, Unit] = Info(() => out).send[S]
-    def io[S, A](perform: () => A)(implicit ev: Member.<=[IO, S]): Eff[S, A] = IO(perform).send[S]
+    type _storageOps[S] = MemberIn.|=[StorageOps, S]
+    type _loggingOps[S] = MemberIn.|=[LoggingOps, S]
+    type _io[S] = MemberIn.|=[IO, S]
+
+    def get[S: _storageOps](key: String): Eff[S, Option[String]] = Get(key).send[S]
+    def set[S: _storageOps](key: String, data: String): Eff[S, Unit] = Set(key, data).send[S]
+    def remove[S: _storageOps](key: String): Eff[S, Unit] = Remove(key).send[S]
+    def info[S: _loggingOps](out: => String): Eff[S, Unit] = Info(() => out).send[S]
+    def io[S: _io, A](perform: () => A): Eff[S, A] = IO(perform).send[S]
   }
 
   type Fex = Fx.fx3[StorageOps, LoggingOps, IO]
