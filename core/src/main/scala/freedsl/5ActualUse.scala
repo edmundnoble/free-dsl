@@ -2,9 +2,21 @@ package freedsl
 
 import org.atnos.eff._, Eff._, syntax.all._
 import cats._, implicits._
-import WhatIsAnInstruction.Examples._, Storage._, Logging._, IO._
 
 object ActualUse {
+
+  sealed abstract class LoggingOps[A]
+  final case class Debug(message: () => String) extends LoggingOps[Unit]
+  final case class Info(message: () => String) extends LoggingOps[Unit]
+  final case class Warning(message: () => String) extends LoggingOps[Unit]
+  final case class Error(message: () => String, ex: Option[Exception]) extends LoggingOps[Unit]
+
+  sealed abstract class StorageOps[A] 
+  final case class Get(key: String) extends StorageOps[Option[String]]
+  final case class Set(key: String, value: String) extends StorageOps[Unit]
+  final case class Remove(key: String) extends StorageOps[Unit]
+
+  final case class IO[A](execute: () => A) 
 
   object SmartConstructors {
     type _storageOps[S] = MemberIn.|=[StorageOps, S]
@@ -18,7 +30,7 @@ object ActualUse {
     def io[S: _io, A](perform: () => A): Eff[S, A] = IO(perform).send[S]
   }
 
-  type Fex = Fx.fx3[StorageOps, LoggingOps, IO]
+  type Fex = Fx.fx2[StorageOps, LoggingOps]
 
   import SmartConstructors._
 
